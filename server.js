@@ -246,6 +246,36 @@ app.post('/api/admin/campaign/rename', adminAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// Delete a past campaign
+app.post('/api/admin/campaign/delete', adminAuth, (req, res) => {
+  const data = req.appData;
+  const id = parseInt(req.body.id, 10);
+  const idx = data.pastCampaigns.findIndex(c => c.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Campaign not found.' });
+  data.pastCampaigns.splice(idx, 1);
+  writeData(data);
+  res.json({ success: true });
+});
+
+// Restore a past campaign as current (current gets archived)
+app.post('/api/admin/campaign/restore', adminAuth, (req, res) => {
+  const data = req.appData;
+  const id = parseInt(req.body.id, 10);
+  const idx = data.pastCampaigns.findIndex(c => c.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Campaign not found.' });
+
+  // Archive current
+  data.pastCampaigns.unshift({ ...data.currentCampaign, closedAt: new Date().toISOString() });
+
+  // Remove restored campaign from past list and make it current
+  const restored = data.pastCampaigns.splice(idx + 1, 1)[0];
+  delete restored.closedAt;
+  data.currentCampaign = restored;
+  data.settings.isOpen = true;
+  writeData(data);
+  res.json({ success: true });
+});
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {

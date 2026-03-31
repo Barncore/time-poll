@@ -653,9 +653,11 @@
             <div class="past-row-name">${esc(c.name)} <span class="cbadge cb-closed">Closed</span></div>
             <div class="past-row-meta">Created ${fmtDate(c.createdAt)} · Closed ${fmtDate(c.closedAt)} · ${c.votes.length} vote${c.votes.length!==1?'s':''}</div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-ghost btn-sm" onclick="copyCampaignLink(${c.id})">⎘ Copy Link</button>
             <button class="btn btn-ghost btn-sm" onclick="viewPastCampaign('${c.id}')">View Results</button>
+            <button class="btn btn-success btn-sm" onclick="restoreCampaign(${c.id})">↩ Make Active</button>
+            <button class="btn btn-ghost btn-sm" onclick="deleteCampaign(${c.id})" style="color:#f87171;border-color:rgba(248,113,113,0.25)" title="Delete campaign">🗑</button>
           </div>
         </div>`).join('');
     }
@@ -664,6 +666,16 @@
       document.getElementById('result-campaign-sel').value = String(id);
       renderResults();
       showTab('results');
+    }
+    async function deleteCampaign(id) {
+      const c = appData.pastCampaigns.find(c => c.id === id);
+      if (!confirm(`Delete "${c?.name}"? This permanently removes all its votes.`)) return;
+      await adminPost('/api/admin/campaign/delete', { id });
+    }
+    async function restoreCampaign(id) {
+      const c = appData.pastCampaigns.find(c => c.id === id);
+      if (!confirm(`Make "${c?.name}" the active campaign? The current campaign will be archived.`)) return;
+      await adminPost('/api/admin/campaign/restore', { id });
     }
 
     // ── Settings rendering ─────────────────────────────────────────────────────
