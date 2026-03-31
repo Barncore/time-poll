@@ -349,9 +349,13 @@
       sel.addEventListener('change', refreshTimes);
     }
 
-    const REF = new Date('2025-01-06T00:00:00Z');
+    function getRefDate() {
+      // Use the current date so DST offsets are always accurate
+      const now = new Date();
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    }
     function localTime(utcH, utcM, tz) {
-      const d = new Date(REF);
+      const d = getRefDate();
       d.setUTCHours(utcH, utcM, 0, 0);
       return d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' }) + ' ' +
              d.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
