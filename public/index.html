@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Operator Stream Time Poll</title>
+  <style>
+    :root {
+      --bg:        #09081a;
+      --bg-card:   #111030;
+      --bg-input:  #0d0c24;
+      --border:    #211f48;
+      --border-hi: #3d3875;
+      --accent:    #7c3aed;
+      --accent-lo: rgba(124,58,237,0.15);
+      --accent-glow: rgba(124,58,237,0.4);
+      --text:      #ece9ff;
+      --text-muted:#7e7ab0;
+      --text-dim:  #44416a;
+      /* can't do — desaturated red when unselected */
+      --cd-bg: #160f0f; --cd-txt: #7a5555; --cd-active-bg: #b91c1c; --cd-active-txt: #fff; --cd-glow: rgba(185,28,28,0.5);
+      /* not preferred — grey */
+      --np-bg: #0f0f1a; --np-txt: #3d3f4a; --np-active-bg: #374151; --np-active-txt: #d1d5db; --np-glow: rgba(107,114,128,0.45);
+      /* that's fine — blue */
+      --fi-bg: #090f1e; --fi-txt: #2d5a8a; --fi-active-bg: #1d4ed8; --fi-active-txt: #fff; --fi-glow: rgba(59,130,246,0.45);
+      /* preferred — green */
+      --pr-bg: #060f0b; --pr-txt: #1a5c35; --pr-active-bg: #16a34a; --pr-active-txt: #fff; --pr-glow: rgba(34,197,94,0.45);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(100,60,200,0.18) 0%, transparent 70%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 16px 16px 48px;
+    }
+
+    .wrap { max-width: 760px; margin: 0 auto; }
+
+    header { text-align: center; padding: 48px 0 28px; }
+    header h1 {
+      font-size: clamp(1.6rem, 5vw, 2.2rem); font-weight: 800; letter-spacing: -0.02em;
+      background: linear-gradient(130deg, #c4b5fd 0%, #818cf8 60%, #60a5fa 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 8px;
+    }
+    header p { color: var(--text-muted); font-size: 0.95rem; }
+    .campaign-badge {
+      display: inline-block; margin-top: 10px; padding: 4px 14px;
+      background: rgba(124,58,237,0.12); border: 1px solid rgba(124,58,237,0.25);
+      border-radius: 100px; font-size: 0.8rem; color: #a78bfa;
+    }
+
+    /* ── timer ── */
+    .timer-bar {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      background: rgba(180,83,9,0.1); border: 1px solid rgba(180,83,9,0.3);
+      border-radius: 10px; padding: 11px 18px; margin-bottom: 14px;
+      font-size: 0.9rem; color: #fbbf24; font-weight: 600;
+    }
+    .timer-bar.urgent { background: rgba(185,28,28,0.12); border-color: rgba(185,28,28,0.35); color: #f87171; }
+    .timer-label { color: var(--text-muted); font-size: 0.8rem; }
+
+    /* ── card ── */
+    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; margin-bottom: 14px; }
+    .user-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 480px) { .user-info { grid-template-columns: 1fr; } }
+
+    label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 7px; }
+
+    input[type="text"], select {
+      width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+      border-radius: 9px; padding: 10px 13px; color: var(--text); font-size: 0.95rem;
+      outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+      appearance: none; -webkit-appearance: none;
+    }
+    input[type="text"]:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-lo); }
+    select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237e7ab0' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+    select option { background: #1a1838; }
+
+    /* ── counters bar ── */
+    .counters-bar {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      border-radius: 9px; padding: 10px 16px; margin-bottom: 14px;
+      background: rgba(124,58,237,0.06); border: 1px solid rgba(124,58,237,0.18);
+      flex-wrap: wrap;
+    }
+    .counter-item { display: flex; align-items: center; gap: 8px; font-size: 0.875rem; }
+    .counter-pref { color: #a78bfa; }
+    .counter-cant { color: #f87171; }
+    .counter-dots { display: flex; gap: 5px; }
+    .cdot { width: 9px; height: 9px; border-radius: 50%; border: 2px solid; background: transparent; transition: background 0.2s; }
+    .cdot.pref-dot       { border-color: rgba(124,58,237,0.4); }
+    .cdot.pref-dot.fill  { background: var(--accent); border-color: var(--accent); }
+    .cdot.cant-dot       { border-color: rgba(185,28,28,0.4); }
+    .cdot.cant-dot.fill  { background: #b91c1c; border-color: #b91c1c; }
+
+    .section-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); padding: 0 4px; margin-bottom: 12px; }
+
+    /* ── time option cards ── */
+    .time-option {
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 18px; margin-bottom: 10px;
+      display: flex; align-items: center; gap: 16px;
+      transition: border-color 0.2s;
+    }
+    .time-option:hover { border-color: var(--border-hi); }
+
+    .time-info { flex: 0 0 auto; min-width: 114px; }
+    .time-local { font-size: 1rem; font-weight: 700; color: var(--text); line-height: 1.2; }
+    .time-utc   { font-size: 0.75rem; color: var(--text-dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+    /* 4 buttons: 2×2 on narrow, 4×1 on wide */
+    .vote-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      flex: 1;
+    }
+    @media (min-width: 580px) { .vote-buttons { grid-template-columns: 1fr 1fr 1fr 1fr; } }
+
+    .vbtn {
+      padding: 8px 6px; border: 1px solid transparent; border-radius: 7px;
+      cursor: pointer; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.01em;
+      transition: all 0.15s; white-space: nowrap; text-align: center;
+    }
+
+    .vbtn.cant        { background: var(--cd-bg); color: var(--cd-txt); border-color: rgba(185,28,28,0.18); }
+    .vbtn.cant:hover  { background: #2e1212; color: #f87171; }
+    .vbtn.cant.sel    { background: var(--cd-active-bg); color: var(--cd-active-txt); box-shadow: 0 0 14px var(--cd-glow); border-color: #dc2626; }
+
+    .vbtn.nope        { background: var(--np-bg); color: var(--np-txt); border-color: rgba(107,114,128,0.15); }
+    .vbtn.nope:hover  { background: #1e1e30; color: #8a909f; }
+    .vbtn.nope.sel    { background: var(--np-active-bg); color: var(--np-active-txt); box-shadow: 0 0 14px var(--np-glow); border-color: #6b7280; }
+
+    .vbtn.fine        { background: var(--fi-bg); color: var(--fi-txt); border-color: rgba(59,130,246,0.15); }
+    .vbtn.fine:hover  { background: #142040; color: #60a5fa; }
+    .vbtn.fine.sel    { background: var(--fi-active-bg); color: var(--fi-active-txt); box-shadow: 0 0 14px var(--fi-glow); border-color: #3b82f6; }
+
+    .vbtn.pref        { background: var(--pr-bg); color: var(--pr-txt); border-color: rgba(34,197,94,0.15); }
+    .vbtn.pref:hover  { background: #0f2a1c; color: #4ade80; }
+    .vbtn.pref.sel    { background: var(--pr-active-bg); color: var(--pr-active-txt); box-shadow: 0 0 14px var(--pr-glow); border-color: #22c55e; }
+
+    @media (max-width: 560px) {
+      .time-option { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .vote-buttons { width: 100%; }
+    }
+
+    .submit-wrap { text-align: center; padding: 18px 0 10px; }
+    .btn-submit {
+      background: linear-gradient(135deg, #7c3aed, #4f46e5); color: #fff;
+      border: none; border-radius: 11px; padding: 14px 48px;
+      font-size: 1rem; font-weight: 800; cursor: pointer; letter-spacing: 0.02em;
+      transition: all 0.2s; box-shadow: 0 4px 24px rgba(124,58,237,0.4);
+    }
+    .btn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 7px 28px rgba(124,58,237,0.55); }
+    .btn-submit:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .toast {
+      position: fixed; bottom: 28px; right: 28px; padding: 13px 20px;
+      border-radius: 10px; font-weight: 700; font-size: 0.88rem;
+      pointer-events: none; opacity: 0; transform: translateY(8px);
+      transition: opacity 0.25s, transform 0.25s; z-index: 9999; max-width: 320px;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok  { background: #15803d; color: #fff; box-shadow: 0 4px 20px rgba(21,128,61,0.5); }
+    .toast.err { background: #b91c1c; color: #fff; box-shadow: 0 4px 20px rgba(185,28,28,0.5); }
+
+    .closed-msg { text-align: center; padding: 80px 20px; }
+    .closed-msg h2 { font-size: 1.4rem; color: var(--text-muted); margin-bottom: 8px; }
+    .closed-msg p  { color: var(--text-dim); font-size: 0.95rem; }
+
+    .admin-link { display: block; text-align: center; margin-top: 32px; font-size: 0.78rem; color: var(--text-dim); text-decoration: none; }
+    .admin-link:hover { color: var(--text-muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Market Operator Stream Time Poll</h1>
+      <p>Pick the times that work best for you</p>
+      <span id="campaign-badge" class="campaign-badge" style="display:none"></span>
+    </header>
+
+    <div id="stale-campaign-msg" style="display:none;margin-bottom:14px;background:rgba(180,83,9,0.1);border:1px solid rgba(180,83,9,0.3);border-radius:10px;padding:12px 18px;font-size:0.875rem;color:#fbbf24;text-align:center">
+      ⚠ This link is for an older poll. A new poll may be active — <a href="/" style="color:#fbbf24;text-decoration:underline">click here for the latest</a>.
+    </div>
+    <div id="timer-container"></div>
+
+    <div id="poll-content">
+      <div class="card">
+        <div class="user-info">
+          <div>
+            <label for="name">Your Discord Username</label>
+            <input type="text" id="name" placeholder="Enter your Discord name…" autocomplete="username">
+          </div>
+          <div>
+            <label for="tz">Your Timezone</label>
+            <select id="tz"></select>
+          </div>
+        </div>
+      </div>
+
+      <div id="counters-bar" class="counters-bar" style="display:none">
+        <div class="counter-item counter-pref">
+          <span id="pref-label">Preferred: <strong>0 / 1</strong></span>
+          <div id="pref-dots" class="counter-dots"></div>
+        </div>
+        <div class="counter-item counter-cant">
+          <span id="cant-label">Can't Do: <strong>0 / 1</strong></span>
+          <div id="cant-dots" class="counter-dots"></div>
+        </div>
+      </div>
+
+      <p class="section-label">Select your availability for each time slot</p>
+      <div id="time-options"></div>
+
+      <div class="submit-wrap">
+        <button class="btn-submit" id="submit-btn" onclick="submitVote()">Submit My Vote</button>
+      </div>
+    </div>
+
+    <div id="closed-msg" class="closed-msg" style="display:none">
+      <h2>Poll is Closed</h2>
+      <p>This poll is not currently accepting responses. Check back later.</p>
+    </div>
+
+    <a href="/admin.html" class="admin-link">Admin</a>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const TZ = [
+      { v: 'Pacific/Honolulu',                   l: 'Hawaii (HST, UTC−10)' },
+      { v: 'America/Anchorage',                  l: 'Anchorage (AKST/AKDT)' },
+      { v: 'America/Los_Angeles',                l: 'Los Angeles / Seattle (PT)' },
+      { v: 'America/Denver',                     l: 'Denver / Phoenix (MT)' },
+      { v: 'America/Chicago',                    l: 'Chicago / Dallas (CT)' },
+      { v: 'America/New_York',                   l: 'New York / Toronto (ET)' },
+      { v: 'America/Halifax',                    l: 'Halifax (AT, UTC−4/−3)' },
+      { v: 'America/Sao_Paulo',                  l: 'São Paulo (BRT, UTC−3)' },
+      { v: 'America/Argentina/Buenos_Aires',     l: 'Buenos Aires (ART, UTC−3)' },
+      { v: 'Atlantic/Azores',                    l: 'Azores (AZOT, UTC−1/0)' },
+      { v: 'UTC',                                l: 'UTC (UTC±0)' },
+      { v: 'Europe/London',                      l: 'London / Dublin (GMT/BST)' },
+      { v: 'Europe/Paris',                       l: 'Paris / Berlin / Rome (CET/CEST)' },
+      { v: 'Europe/Helsinki',                    l: 'Helsinki / Athens / Kyiv (EET/EEST)' },
+      { v: 'Europe/Moscow',                      l: 'Moscow (MSK, UTC+3)' },
+      { v: 'Asia/Dubai',                         l: 'Dubai / Abu Dhabi (GST, UTC+4)' },
+      { v: 'Asia/Karachi',                       l: 'Karachi / Islamabad (PKT, UTC+5)' },
+      { v: 'Asia/Kolkata',                       l: 'India (IST, UTC+5:30)' },
+      { v: 'Asia/Dhaka',                         l: 'Dhaka / Almaty (UTC+6)' },
+      { v: 'Asia/Bangkok',                       l: 'Bangkok / Ho Chi Minh (ICT, UTC+7)' },
+      { v: 'Asia/Singapore',                     l: 'Singapore / KL / Manila (SGT, UTC+8)' },
+      { v: 'Asia/Shanghai',                      l: 'China (CST, UTC+8)' },
+      { v: 'Asia/Tokyo',                         l: 'Tokyo / Seoul (JST/KST, UTC+9)' },
+      { v: 'Australia/Perth',                    l: 'Perth (AWST, UTC+8)' },
+      { v: 'Australia/Sydney',                   l: 'Sydney / Melbourne (AEST/AEDT)' },
+      { v: 'Pacific/Auckland',                   l: 'Auckland (NZST/NZDT)' },
+    ];
+
+    let settings = null;
+    let votes = {};
+    let timerInterval = null;
+
+    async function init() {
+      try { settings = await fetch('/api/settings').then(r => r.json()); }
+      catch { showToast('Could not load poll — please refresh.', 'err'); return; }
+
+      buildTzDropdown();
+
+      if (settings.campaign?.name) {
+        const b = document.getElementById('campaign-badge');
+        b.textContent = settings.campaign.name;
+        b.style.display = 'inline-block';
+      }
+
+      // Stale campaign link check
+      const urlCampaign = new URLSearchParams(window.location.search).get('c');
+      if (urlCampaign && String(settings.campaign?.id) !== urlCampaign) {
+        document.getElementById('stale-campaign-msg').style.display = 'block';
+      }
+
+      const endsAt  = settings.campaign?.endsAt;
+      const expired = endsAt && new Date() > new Date(endsAt);
+
+      if (endsAt && !expired) startTimer(endsAt);
+
+      if (!settings.isOpen || expired) {
+        document.getElementById('poll-content').style.display = 'none';
+        document.getElementById('closed-msg').style.display   = 'block';
+        return;
+      }
+
+      buildOptions();
+      updateCounters();
+    }
+
+    // ── Timer countdown ────────────────────────────────────────────────────────
+    function startTimer(endsAt) {
+      const container = document.getElementById('timer-container');
+      function tick() {
+        const diff = new Date(endsAt) - new Date();
+        if (diff <= 0) {
+          clearInterval(timerInterval);
+          container.innerHTML = '';
+          document.getElementById('poll-content').style.display = 'none';
+          document.getElementById('closed-msg').style.display   = 'block';
+          return;
+        }
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        const urgent = diff < 3600000;
+        const parts = [];
+        if (h > 0) parts.push(`${h}h`);
+        parts.push(`${m}m`);
+        parts.push(`${s}s`);
+        container.innerHTML = `
+          <div class="timer-bar${urgent ? ' urgent' : ''}">
+            <span>⏱</span>
+            <span><span class="timer-label">Poll closes in </span><strong>${parts.join(' ')}</strong></span>
+          </div>`;
+      }
+      tick();
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    // ── Timezone dropdown ──────────────────────────────────────────────────────
+    function buildTzDropdown() {
+      const sel = document.getElementById('tz');
+      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      let found = false;
+      TZ.forEach(tz => {
+        const opt = document.createElement('option');
+        opt.value = tz.v; opt.textContent = tz.l;
+        if (tz.v === detected) { opt.selected = true; found = true; }
+        sel.appendChild(opt);
+      });
+      if (!found) {
+        const opt = document.createElement('option');
+        opt.value = detected; opt.textContent = detected; opt.selected = true;
+        sel.insertBefore(opt, sel.firstChild);
+      }
+      sel.addEventListener('change', refreshTimes);
+    }
+
+    const REF = new Date('2025-01-06T00:00:00Z');
+    function localTime(utcH, utcM, tz) {
+      const d = new Date(REF);
+      d.setUTCHours(utcH, utcM, 0, 0);
+      return d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' }) + ' ' +
+             d.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
+    }
+    function utcLabel(h, m) { return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} UTC`; }
+
+    function buildOptions() {
+      const container = document.getElementById('time-options');
+      container.innerHTML = '';
+      const tz = document.getElementById('tz').value;
+      settings.timeOptions.forEach(opt => {
+        if (!(opt.id in votes)) votes[opt.id] = 'fine';
+        const div = document.createElement('div');
+        div.className = 'time-option';
+        div.innerHTML = `
+          <div class="time-info">
+            <div class="time-local" id="tl-${opt.id}">${localTime(opt.utcHour, opt.utcMinute, tz)}</div>
+            <div class="time-utc">${utcLabel(opt.utcHour, opt.utcMinute)}</div>
+          </div>
+          <div class="vote-buttons">
+            <button class="vbtn cant" id="b-${opt.id}-cantdo"       onclick="pick(${opt.id},'cantdo')">      ✕ Can't Do</button>
+            <button class="vbtn nope" id="b-${opt.id}-notpreferred"  onclick="pick(${opt.id},'notpreferred')">— Not Preferred</button>
+            <button class="vbtn fine" id="b-${opt.id}-fine"          onclick="pick(${opt.id},'fine')">        ✓ That's Fine</button>
+            <button class="vbtn pref" id="b-${opt.id}-preferred"     onclick="pick(${opt.id},'preferred')">   ★ Preferred!</button>
+          </div>`;
+        container.appendChild(div);
+        applyBtn(opt.id, votes[opt.id]);
+      });
+    }
+
+    function refreshTimes() {
+      const tz = document.getElementById('tz').value;
+      settings.timeOptions.forEach(opt => {
+        const el = document.getElementById(`tl-${opt.id}`);
+        if (el) el.textContent = localTime(opt.utcHour, opt.utcMinute, tz);
+      });
+    }
+
+    function pick(id, type) {
+      const vals = Object.values(votes);
+      const prefCount = vals.filter(v => v === 'preferred').length;
+      const cantCount = vals.filter(v => v === 'cantdo').length;
+
+      if (type === 'preferred' && votes[id] !== 'preferred' && prefCount >= settings.maxPreferred) {
+        showToast(`Max ${settings.maxPreferred} Preferred selection${settings.maxPreferred === 1 ? '' : 's'} allowed.`, 'err');
+        return;
+      }
+      if (type === 'cantdo' && votes[id] !== 'cantdo' && cantCount >= settings.maxCantDo) {
+        showToast(`Max ${settings.maxCantDo} Can't Do selection${settings.maxCantDo === 1 ? '' : 's'} allowed.`, 'err');
+        return;
+      }
+      votes[id] = type;
+      applyBtn(id, type);
+      updateCounters();
+    }
+
+    function applyBtn(id, type) {
+      ['cantdo','notpreferred','fine','preferred'].forEach(t => {
+        const btn = document.getElementById(`b-${id}-${t}`);
+        if (btn) btn.classList.toggle('sel', t === type);
+      });
+    }
+
+    function updateCounters() {
+      const vals = Object.values(votes);
+      const prefCount = vals.filter(v => v === 'preferred').length;
+      const cantCount = vals.filter(v => v === 'cantdo').length;
+      const maxPref = settings.maxPreferred;
+      const maxCant = settings.maxCantDo;
+
+      document.getElementById('counters-bar').style.display = 'flex';
+      document.getElementById('pref-label').innerHTML = `Preferred: <strong>${prefCount} / ${maxPref}</strong>`;
+      document.getElementById('cant-label').innerHTML = `Can't Do: <strong>${cantCount} / ${maxCant}</strong>`;
+
+      const prefDots = document.getElementById('pref-dots');
+      prefDots.innerHTML = '';
+      for (let i = 0; i < maxPref; i++) {
+        const d = document.createElement('div');
+        d.className = 'cdot pref-dot' + (i < prefCount ? ' fill' : '');
+        prefDots.appendChild(d);
+      }
+      const cantDots = document.getElementById('cant-dots');
+      cantDots.innerHTML = '';
+      for (let i = 0; i < maxCant; i++) {
+        const d = document.createElement('div');
+        d.className = 'cdot cant-dot' + (i < cantCount ? ' fill' : '');
+        cantDots.appendChild(d);
+      }
+    }
+
+    async function submitVote() {
+      const name = document.getElementById('name').value.trim();
+      if (!name) { showToast('Please enter your Discord name.', 'err'); return; }
+      const tz  = document.getElementById('tz').value;
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true; btn.textContent = 'Submitting…';
+      try {
+        const res  = await fetch('/api/vote', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, timezone: tz, votes })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showToast(data.updated ? 'Vote updated! ✓' : 'Vote submitted! ✓', 'ok');
+          btn.textContent = data.updated ? 'Vote Updated ✓' : 'Vote Submitted ✓';
+        } else {
+          showToast(data.error, 'err');
+          btn.disabled = false; btn.textContent = 'Submit My Vote';
+        }
+      } catch {
+        showToast('Could not submit — please try again.', 'err');
+        btn.disabled = false; btn.textContent = 'Submit My Vote';
+      }
+    }
+
+    let toastTimer;
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = `toast ${type} show`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove('show'), 3800);
+    }
+
+    init();
+  </script>
+</body>
+</html>

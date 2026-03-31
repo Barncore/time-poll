@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin — Market Operator Stream Time Poll</title>
+  <style>
+    :root {
+      --bg:        #09081a;
+      --bg-card:   #111030;
+      --bg-card2:  #16143a;
+      --bg-input:  #0d0c24;
+      --border:    #211f48;
+      --border-hi: #3d3875;
+      --accent:    #7c3aed;
+      --accent-lo: rgba(124,58,237,0.15);
+      --accent-glow: rgba(124,58,237,0.4);
+      --text:      #ece9ff;
+      --text-muted:#7e7ab0;
+      --text-dim:  #44416a;
+      --green:  #16a34a; --green-lo:  rgba(22,163,74,0.15);
+      --red:    #b91c1c; --red-lo:    rgba(185,28,28,0.15);
+      --cant-clr:  #ef4444;
+      --nope-clr:  #6b7280;
+      --fine-clr:  #3b82f6;
+      --pref-clr:  #22c55e;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      background-image: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(100,60,200,0.18) 0%, transparent 70%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh; padding: 16px 16px 60px;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+
+    header { text-align: center; padding: 40px 0 28px; }
+    header h1 {
+      font-size: clamp(1.4rem, 4vw, 1.9rem); font-weight: 800; letter-spacing: -0.02em;
+      background: linear-gradient(130deg, #c4b5fd, #818cf8, #60a5fa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      margin-bottom: 6px;
+    }
+    header p { color: var(--text-muted); font-size: 0.88rem; }
+
+    .login-box { max-width: 360px; margin: 0 auto; background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 28px 26px; }
+    .login-box h2 { font-size: 1rem; font-weight: 700; margin-bottom: 18px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+
+    label { display: block; font-size: 0.73rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 7px; }
+    input[type="text"], input[type="password"], input[type="number"], input[type="time"], select {
+      width: 100%; background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; color: var(--text); font-size: 0.92rem; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s; appearance: none; -webkit-appearance: none;
+    }
+    input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-lo); }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 9px 18px; border: 1px solid transparent; border-radius: 8px;
+      font-size: 0.86rem; font-weight: 700; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 2px 12px var(--accent-glow); }
+    .btn-primary:hover { filter: brightness(1.15); }
+    .btn-success { background: var(--green); color: #fff; box-shadow: 0 2px 10px rgba(22,163,74,0.4); }
+    .btn-success:hover { filter: brightness(1.1); }
+    .btn-danger  { background: var(--red);   color: #fff; box-shadow: 0 2px 10px rgba(185,28,28,0.4); }
+    .btn-danger:hover  { filter: brightness(1.1); }
+    .btn-ghost   { background: transparent; color: var(--text-muted); border-color: var(--border); }
+    .btn-ghost:hover   { border-color: var(--border-hi); color: var(--text); }
+    .btn-link    { background: transparent; color: #a78bfa; border-color: rgba(124,58,237,0.3); }
+    .btn-link:hover    { border-color: var(--accent); color: #c4b5fd; }
+    .btn-sm { padding: 6px 12px; font-size: 0.78rem; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #dashboard { display: none; }
+
+    /* ── status bar ── */
+    .status-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 12px 18px; margin-bottom: 20px;
+    }
+    .status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 100px; font-size: 0.8rem; font-weight: 700; }
+    .status-pill.open   { background: var(--green-lo); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    .status-pill.closed { background: var(--red-lo);   color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .voter-count { font-size: 0.85rem; color: var(--text-muted); }
+    .voter-count strong { color: var(--text); }
+    .status-bar .spacer { flex: 1; min-width: 8px; }
+
+    /* ── tabs ── */
+    .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
+    .tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 0.88rem; font-weight: 700; cursor: pointer; transition: all 0.15s; margin-bottom: -1px; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: #a78bfa; border-bottom-color: var(--accent); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .section-h { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 14px; }
+
+    /* ── results ── */
+    .result-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 8px; display: grid; grid-template-columns: 36px 1fr auto; gap: 14px; align-items: center; }
+    .result-rank { font-size: 1.1rem; font-weight: 800; text-align: center; }
+    .r1 { color: #fbbf24; } .r2 { color: #94a3b8; } .r3 { color: #cd7c44; } .rx { color: var(--text-dim); }
+    .result-label { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+    .result-bar-wrap { height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; display: flex; }
+    .bar-seg { height: 100%; transition: width 0.4s; }
+    .bar-cant { background: var(--cant-clr); }
+    .bar-nope { background: var(--nope-clr); }
+    .bar-fine { background: var(--fine-clr); }
+    .bar-pref { background: var(--pref-clr); }
+    .result-breakdown { display: flex; gap: 8px; margin-top: 5px; font-size: 0.76rem; flex-wrap: wrap; }
+    .bd-cant { color: var(--cant-clr); } .bd-nope { color: var(--nope-clr); } .bd-fine { color: var(--fine-clr); } .bd-pref { color: var(--pref-clr); }
+    .result-score { text-align: right; }
+    .score-num { font-size: 1.3rem; font-weight: 800; color: var(--text); }
+    .score-max { font-size: 0.72rem; color: var(--text-dim); margin-top: 1px; }
+    .no-votes { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 0.9rem; }
+
+    /* ── votes table ── */
+    .votes-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; margin-top: 22px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 580px; }
+    th { background: var(--bg-card2); padding: 10px 12px; text-align: left; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 9px 12px; border-bottom: 1px solid rgba(33,31,72,0.6); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .vchip { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; }
+    .vc-cd { background: rgba(239,68,68,0.2);  color: #f87171; }
+    .vc-np { background: rgba(107,114,128,0.2); color: #9ca3af; }
+    .vc-fi { background: rgba(59,130,246,0.2);  color: #60a5fa; }
+    .vc-pr { background: rgba(34,197,94,0.2);   color: #4ade80; }
+    .voted-at { color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; }
+
+    /* ── campaign selector ── */
+    .campaign-selector { display: flex; align-items: center; gap: 10px; background: var(--bg-card2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; margin-bottom: 18px; flex-wrap: wrap; }
+    .campaign-selector label { margin: 0; font-size: 0.75rem; white-space: nowrap; }
+    .campaign-selector select { max-width: 280px; font-size: 0.88rem; padding: 6px 10px; }
+
+    /* ── settings ── */
+    .settings-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; margin-bottom: 18px; }
+    .settings-card h3 { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .field-row { margin-bottom: 14px; }
+    .inline-row { display: flex; gap: 10px; align-items: flex-end; }
+    .inline-row .field-row { flex: 1; margin-bottom: 0; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 600; color: var(--text-muted); padding: 6px 0; }
+    .checkbox-row input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+
+    /* time editor */
+    .time-edit-row { display: grid; grid-template-columns: 1fr 90px 90px auto; gap: 8px; align-items: end; margin-bottom: 10px; }
+    @media (max-width: 540px) { .time-edit-row { grid-template-columns: 1fr 1fr; } .time-edit-row .te-label { grid-column: 1 / -1; } }
+    .add-time-row { display: flex; gap: 8px; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+
+    /* ── campaigns tab ── */
+    .campaign-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; }
+    .campaign-card.current { border-color: rgba(124,58,237,0.4); }
+    .campaign-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .campaign-card-title { font-size: 1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .campaign-card-meta  { font-size: 0.78rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* inline rename */
+    .rename-form { display: none; align-items: center; gap: 8px; margin-top: 10px; }
+    .rename-form input { flex: 1; max-width: 260px; }
+    .rename-form.open { display: flex; }
+
+    .cbadge { display: inline-block; padding: 3px 10px; border-radius: 100px; font-size: 0.72rem; font-weight: 700; }
+    .cb-active  { background: var(--green-lo); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+    .cb-expired { background: var(--red-lo);   color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+    .cb-closed  { background: rgba(107,114,128,0.15); color: #9ca3af; border: 1px solid rgba(107,114,128,0.3); }
+
+    .timer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.85rem; }
+    .timer-val     { color: #fbbf24; font-weight: 700; }
+    .timer-expired { color: #f87171; font-weight: 700; }
+
+    .new-camp-form { background: var(--bg-card2); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+    .new-camp-form h4 { font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 14px; }
+
+    .past-row { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .past-row-info { flex: 1; min-width: 160px; }
+    .past-row-name { font-weight: 700; font-size: 0.9rem; }
+    .past-row-meta { font-size: 0.75rem; color: var(--text-muted); margin-top: 2px; }
+
+    /* confirm strip */
+    .confirm-strip { background: rgba(185,28,28,0.1); border: 1px solid rgba(185,28,28,0.3); border-radius: 8px; padding: 12px 16px; margin-bottom: 12px; display: none; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .confirm-strip span { font-size: 0.85rem; color: #f87171; }
+
+    .refresh-info { font-size: 0.72rem; color: var(--text-dim); }
+
+    /* toast */
+    .toast { position: fixed; bottom: 26px; right: 26px; padding: 12px 18px; border-radius: 9px; font-weight: 700; font-size: 0.86rem; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity 0.25s, transform 0.25s; z-index: 9999; max-width: 320px; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok  { background: #15803d; color: #fff; box-shadow: 0 4px 18px rgba(21,128,61,0.5); }
+    .toast.err { background: #b91c1c; color: #fff; box-shadow: 0 4px 18px rgba(185,28,28,0.5); }
+
+    select option { background: #1a1838; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Admin Panel</h1>
+      <p>Manage your group session time poll</p>
+    </header>
+
+    <div id="login-box" class="login-box">
+      <h2>Sign In</h2>
+      <div class="field-row">
+        <label for="pw">Admin Password</label>
+        <input type="password" id="pw" placeholder="Password…" onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:8px;justify-content:center" onclick="login()">Login</button>
+      <div id="login-err" style="color:#f87171;font-size:0.82rem;margin-top:10px;display:none"></div>
+    </div>
+
+    <div id="dashboard">
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div id="status-pill" class="status-pill open"><span class="dot"></span> Open</div>
+        <span id="voter-count" class="voter-count"><strong>0</strong> voters</span>
+        <div class="spacer"></div>
+        <a href="/" class="btn btn-link btn-sm" target="_blank">↗ View Poll</a>
+        <button class="btn btn-ghost btn-sm" onclick="copyLink()">⎘ Copy Link</button>
+        <button id="toggle-btn" class="btn btn-sm" onclick="togglePoll()">Close Poll</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="results"   onclick="showTab('results')">Results</button>
+        <button class="tab-btn"        data-tab="campaigns" onclick="showTab('campaigns')">Campaigns</button>
+        <button class="tab-btn"        data-tab="settings"  onclick="showTab('settings')">Settings</button>
+      </div>
+
+      <!-- ══ Results Tab ══ -->
+      <div id="tab-results" class="tab-pane active">
+
+        <div class="campaign-selector">
+          <label>Viewing:</label>
+          <select id="result-campaign-sel" onchange="renderResults()"></select>
+          <span id="refresh-ts" class="refresh-info"></span>
+          <div style="margin-left:auto;display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="loadData()">↻ Refresh</button>
+            <button class="btn btn-danger btn-sm" onclick="confirmClear()">Clear Results</button>
+          </div>
+        </div>
+
+        <div id="confirm-clear" class="confirm-strip">
+          <span>⚠ Delete all votes for the current campaign?</span>
+          <button class="btn btn-danger btn-sm" onclick="clearVotes()">Yes, Clear</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('confirm-clear').style.display='none'">Cancel</button>
+        </div>
+
+        <div id="results-list"></div>
+
+        <div style="margin-top:30px">
+          <p class="section-h">Individual votes</p>
+          <div class="votes-table-wrap">
+            <table><thead><tr id="votes-thead"></tr></thead><tbody id="votes-tbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ Campaigns Tab ══ -->
+      <div id="tab-campaigns" class="tab-pane">
+        <p class="section-h">Current campaign</p>
+        <div id="current-campaign-card" class="campaign-card current"></div>
+
+        <div class="new-camp-form" style="margin-top:18px">
+          <h4>Start New Campaign</h4>
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+            <div class="field-row" style="flex:1;min-width:180px;margin:0">
+              <label>Campaign name (optional)</label>
+              <input type="text" id="new-camp-name" placeholder="e.g. April Session">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="startNewCampaign()">▶ Start New Campaign</button>
+          </div>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:10px">Archives the current campaign and starts fresh. Timer settings from Settings tab apply automatically.</p>
+        </div>
+
+        <div style="margin-top:28px">
+          <p class="section-h">Past campaigns</p>
+          <div id="past-campaigns-list"></div>
+        </div>
+      </div>
+
+      <!-- ══ Settings Tab ══ -->
+      <div id="tab-settings" class="tab-pane">
+
+        <div class="settings-card">
+          <h3>Poll Control</h3>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+            <button id="s-toggle-btn" class="btn btn-ghost" onclick="togglePoll()">Close Poll</button>
+            <span id="s-status-note" style="font-size:0.85rem;color:var(--text-muted)">Poll is currently open.</span>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>Poll Timer (for new campaigns)</h3>
+          <label class="checkbox-row" style="text-transform:none;letter-spacing:0;margin-bottom:12px">
+            <input type="checkbox" id="timer-enabled" onchange="toggleTimerFields()">
+            Enable timer for new campaigns
+          </label>
+          <div id="timer-fields" style="display:none">
+            <div class="inline-row">
+              <div class="field-row">
+                <label for="timer-hours">Duration (hours, 1–999)</label>
+                <input type="number" id="timer-hours" min="1" max="999" value="24" style="max-width:120px">
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="saveTimerSettings()">Save Timer Settings</button>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">Takes effect on the next new campaign.</p>
+        </div>
+
+        <div class="settings-card">
+          <h3>Voting Limits</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:14px">
+            <div>
+              <label for="max-pref">Max ★ Preferred per student</label>
+              <input type="number" id="max-pref" min="1" max="6" value="1">
+            </div>
+            <div>
+              <label for="max-cant">Max ✕ Can't Do per student</label>
+              <input type="number" id="max-cant" min="0" max="6" value="1">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveVotingLimits()">Save Limits</button>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">Preferred: 1–6 · Can't Do: 0–6</p>
+        </div>
+
+        <div class="settings-card">
+          <h3>Ranking Options</h3>
+          <label class="checkbox-row">
+            <input type="checkbox" id="cantdo-in-ranking" checked>
+            Include "Can't Do" in scoring (−1 point)
+          </label>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;margin-left:24px">
+            When off, Can't Do votes are treated as 0 points in the final ranking.
+          </p>
+          <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveRankingOptions()">Save</button>
+        </div>
+
+        <div class="settings-card">
+          <h3>Time Options</h3>
+          <div id="time-edit-list"></div>
+          <div class="add-time-row">
+            <div style="flex:1;min-width:120px">
+              <label>New label</label>
+              <input type="text" id="new-label" placeholder="e.g. 5:00pm UTC">
+            </div>
+            <div>
+              <label>UTC time</label>
+              <input type="time" id="new-time" value="17:00" style="width:120px">
+            </div>
+            <button class="btn btn-ghost btn-sm" style="margin-top:auto" onclick="addTimeOption()">+ Add</button>
+          </div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);text-align:right">
+            <button class="btn btn-primary btn-sm" onclick="saveTimeOptions()">Save Time Options</button>
+          </div>
+        </div>
+
+        <div class="settings-card">
+          <h3>Admin Password</h3>
+          <div class="inline-row">
+            <div class="field-row">
+              <label for="new-pw">New password</label>
+              <input type="password" id="new-pw" placeholder="Enter new password…">
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="changePassword()">Update</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let password = sessionStorage.getItem('admin_pw') || '';
+    let appData  = null;
+    let refreshTimer = null;
+    let campTimerInterval = null;
+
+    // ── Login ──────────────────────────────────────────────────────────────────
+    async function login() {
+      const pw = document.getElementById('pw').value;
+      if (!pw) return;
+      try {
+        const res = await fetch('/api/admin/data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw })
+        });
+        if (!res.ok) { showLoginErr('Incorrect password.'); return; }
+        password = pw;
+        sessionStorage.setItem('admin_pw', pw);
+        appData = await res.json();
+        document.getElementById('login-box').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        renderAll();
+        startAutoRefresh();
+      } catch { showLoginErr('Connection error.'); }
+    }
+    function showLoginErr(msg) {
+      const el = document.getElementById('login-err');
+      el.textContent = msg; el.style.display = 'block';
+    }
+    if (password) { document.getElementById('pw').value = password; login(); }
+
+    // ── Load ───────────────────────────────────────────────────────────────────
+    async function loadData() {
+      try {
+        const res = await fetch('/api/admin/data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        if (!res.ok) return;
+        appData = await res.json();
+        renderAll();
+      } catch {}
+    }
+    function startAutoRefresh() {
+      clearInterval(refreshTimer);
+      refreshTimer = setInterval(loadData, 30000);
+    }
+
+    // ── Render all ─────────────────────────────────────────────────────────────
+    function renderAll() {
+      renderStatusBar();
+      populateCampaignSelector();
+      renderResults();
+      renderCampaignsTab();
+      renderSettings();
+      document.getElementById('refresh-ts').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    }
+
+    function renderStatusBar() {
+      const { isOpen } = appData.settings;
+      const vCount = appData.currentCampaign.votes.length;
+      const pill = document.getElementById('status-pill');
+      pill.className = `status-pill ${isOpen ? 'open' : 'closed'}`;
+      pill.innerHTML = `<span class="dot"></span> ${isOpen ? 'Open' : 'Closed'}`;
+      document.getElementById('voter-count').innerHTML = `<strong>${vCount}</strong> voter${vCount !== 1 ? 's' : ''} (current)`;
+      document.getElementById('toggle-btn').textContent = isOpen ? 'Close Poll' : 'Open Poll';
+      document.getElementById('toggle-btn').className = `btn btn-sm ${isOpen ? 'btn-ghost' : 'btn-success'}`;
+    }
+
+    // ── Campaign selector ──────────────────────────────────────────────────────
+    function populateCampaignSelector() {
+      const sel = document.getElementById('result-campaign-sel');
+      const prev = sel.value;
+      sel.innerHTML = '';
+      const cur = document.createElement('option');
+      cur.value = '__current__';
+      cur.textContent = `${appData.currentCampaign.name} (current)`;
+      sel.appendChild(cur);
+      appData.pastCampaigns.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = `${c.name} — closed ${fmtDate(c.closedAt)}`;
+        sel.appendChild(opt);
+      });
+      if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+    }
+
+    function getSelectedCampaign() {
+      const val = document.getElementById('result-campaign-sel').value;
+      if (val === '__current__') return appData.currentCampaign;
+      return appData.pastCampaigns.find(c => String(c.id) === val) || appData.currentCampaign;
+    }
+
+    // ── Results ────────────────────────────────────────────────────────────────
+    const VOTE_SCORES = { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
+
+    function renderResults() {
+      if (!appData) return;
+      const campaign = getSelectedCampaign();
+      const { timeOptions, cantDoInRanking } = appData.settings;
+      const { votes } = campaign;
+      const container = document.getElementById('results-list');
+      container.innerHTML = '';
+
+      if (!votes.length) {
+        container.innerHTML = '<div class="no-votes">No votes in this campaign yet.</div>';
+        renderVotesTable(timeOptions, votes);
+        return;
+      }
+
+      const scored = timeOptions.map(opt => {
+        let score = 0, cant = 0, nope = 0, fine = 0, pref = 0;
+        votes.forEach(v => {
+          const vt = v.votes[opt.id] || v.votes[String(opt.id)] || 'fine';
+          if      (vt === 'cantdo')      { cant++; if (cantDoInRanking) score -= 1; }
+          else if (vt === 'notpreferred') { nope++; }
+          else if (vt === 'fine')        { fine++; score += 1; }
+          else if (vt === 'preferred')   { pref++; score += 2; }
+        });
+        return { ...opt, score, cant, nope, fine, pref };
+      }).sort((a, b) => b.score - a.score || a.cant - b.cant);
+
+      // max possible: all preferred = votes.length * 2
+      const maxPossible = votes.length * 2;
+
+      scored.forEach((opt, idx) => {
+        const rank = idx + 1;
+        const rc   = ['','r1','r2','r3'][rank] || 'rx';
+        const rl   = ['','🥇','🥈','🥉'][rank] || `#${rank}`;
+        const tot  = (opt.cant + opt.nope + opt.fine + opt.pref) || 1;
+
+        const div = document.createElement('div');
+        div.className = 'result-row';
+        div.innerHTML = `
+          <div class="result-rank ${rc}">${rl}</div>
+          <div>
+            <div class="result-label">${opt.label}</div>
+            <div class="result-bar-wrap">
+              <div class="bar-seg bar-cant" style="width:${(opt.cant/tot*100).toFixed(1)}%"></div>
+              <div class="bar-seg bar-nope" style="width:${(opt.nope/tot*100).toFixed(1)}%"></div>
+              <div class="bar-seg bar-fine" style="width:${(opt.fine/tot*100).toFixed(1)}%"></div>
+              <div class="bar-seg bar-pref" style="width:${(opt.pref/tot*100).toFixed(1)}%"></div>
+            </div>
+            <div class="result-breakdown">
+              <span class="bd-cant">✕ ${opt.cant} can't do</span>
+              <span class="bd-nope">— ${opt.nope} not preferred</span>
+              <span class="bd-fine">✓ ${opt.fine} fine</span>
+              <span class="bd-pref">★ ${opt.pref} preferred</span>
+            </div>
+          </div>
+          <div class="result-score">
+            <div class="score-num">${opt.score}</div>
+            <div class="score-max">/ ${maxPossible} pts</div>
+          </div>`;
+        container.appendChild(div);
+      });
+
+      renderVotesTable(timeOptions, votes);
+    }
+
+    function renderVotesTable(timeOptions, votes) {
+      const thead = document.getElementById('votes-thead');
+      const tbody = document.getElementById('votes-tbody');
+      thead.innerHTML = `<th>Discord Name</th><th>Timezone</th>` +
+        timeOptions.map(o => `<th>${o.label.replace(' UTC','')}</th>`).join('') +
+        `<th>Submitted</th>`;
+      tbody.innerHTML = '';
+      if (!votes.length) {
+        tbody.innerHTML = `<tr><td colspan="${timeOptions.length+3}" style="text-align:center;color:var(--text-dim);padding:20px">No votes</td></tr>`;
+        return;
+      }
+      [...votes].reverse().forEach(v => {
+        const tr = document.createElement('tr');
+        const cells = timeOptions.map(opt => {
+          const vt = v.votes[opt.id] || v.votes[String(opt.id)] || 'fine';
+          const cls = { cantdo:'vc-cd', notpreferred:'vc-np', fine:'vc-fi', preferred:'vc-pr' }[vt] || 'vc-fi';
+          const lbl = { cantdo:'✕', notpreferred:'—', fine:'✓', preferred:'★' }[vt] || '✓';
+          return `<td><span class="vchip ${cls}">${lbl}</span></td>`;
+        }).join('');
+        tr.innerHTML = `<td style="font-weight:600">${esc(v.name)}</td><td style="color:var(--text-muted);font-size:0.78rem">${esc(v.timezone)}</td>${cells}<td class="voted-at">${fmtDate(v.submittedAt)}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ── Campaigns tab ──────────────────────────────────────────────────────────
+    function renderCampaignsTab() {
+      renderCurrentCampaignCard();
+      renderPastCampaigns();
+    }
+
+    function renderCurrentCampaignCard() {
+      const c = appData.currentCampaign;
+      const card = document.getElementById('current-campaign-card');
+      const expired = c.endsAt && new Date() > new Date(c.endsAt);
+      const badge = expired
+        ? '<span class="cbadge cb-expired">Expired</span>'
+        : '<span class="cbadge cb-active">Active</span>';
+
+      let timerHtml = '';
+      if (c.endsAt) {
+        const diff = new Date(c.endsAt) - new Date();
+        const live = diff > 0;
+        timerHtml = `
+          <div class="timer-row">
+            <span style="color:var(--text-muted)">⏱</span>
+            <span class="${live ? 'timer-val' : 'timer-expired'}" id="camp-timer-display">${live ? formatDuration(diff) : 'Expired'}</span>
+            <span style="color:var(--text-dim);font-size:0.75rem">ends ${fmtDateTime(c.endsAt)}</span>
+            <button class="btn btn-ghost btn-sm" onclick="removeCurrentTimer()" style="color:#f87171;border-color:rgba(248,113,113,0.3)">Remove Timer</button>
+          </div>`;
+        if (live) startCampTimerTick(c.endsAt);
+      } else {
+        timerHtml = `
+          <div class="timer-row">
+            <span style="color:var(--text-muted)">⏱ No timer set</span>
+            <input type="number" id="extend-hours" min="1" max="999" value="24" style="width:70px;padding:5px 8px;font-size:0.8rem">
+            <span style="font-size:0.78rem;color:var(--text-dim)">hrs</span>
+            <button class="btn btn-ghost btn-sm" onclick="addCurrentTimer()">+ Add Timer</button>
+          </div>`;
+      }
+
+      card.innerHTML = `
+        <div class="campaign-card-header">
+          <div>
+            <div class="campaign-card-title">
+              <span id="camp-name-display">${esc(c.name)}</span> ${badge}
+            </div>
+            <div class="campaign-card-meta">Created ${fmtDate(c.createdAt)} · <strong>${c.votes.length}</strong> vote${c.votes.length!==1?'s':''}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="copyCampaignLink(${c.id})">⎘ Copy Poll Link</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleRenameForm()">✎ Rename</button>
+          </div>
+        </div>
+        <div class="rename-form" id="rename-form">
+          <input type="text" id="rename-input" value="${esc(c.name)}" placeholder="Campaign name…" style="max-width:260px">
+          <button class="btn btn-primary btn-sm" onclick="submitRename()">Save</button>
+          <button class="btn btn-ghost btn-sm" onclick="toggleRenameForm()">Cancel</button>
+        </div>
+        ${timerHtml}`;
+    }
+
+    function toggleRenameForm() {
+      const form = document.getElementById('rename-form');
+      form.classList.toggle('open');
+      if (form.classList.contains('open')) {
+        document.getElementById('rename-input').focus();
+        document.getElementById('rename-input').select();
+      }
+    }
+
+    async function submitRename() {
+      const name = document.getElementById('rename-input').value.trim();
+      if (!name) { showToast('Name cannot be empty.', 'err'); return; }
+      await adminPost('/api/admin/campaign/rename', { name });
+    }
+
+    function startCampTimerTick(endsAt) {
+      clearInterval(campTimerInterval);
+      campTimerInterval = setInterval(() => {
+        const el = document.getElementById('camp-timer-display');
+        if (!el) { clearInterval(campTimerInterval); return; }
+        const diff = new Date(endsAt) - new Date();
+        if (diff <= 0) { el.textContent = 'Expired'; el.className = 'timer-expired'; clearInterval(campTimerInterval); return; }
+        el.textContent = formatDuration(diff);
+      }, 1000);
+    }
+
+    function renderPastCampaigns() {
+      const container = document.getElementById('past-campaigns-list');
+      if (!appData.pastCampaigns.length) {
+        container.innerHTML = '<div class="no-votes">No past campaigns yet.</div>';
+        return;
+      }
+      container.innerHTML = appData.pastCampaigns.map(c => `
+        <div class="past-row">
+          <div class="past-row-info">
+            <div class="past-row-name">${esc(c.name)} <span class="cbadge cb-closed">Closed</span></div>
+            <div class="past-row-meta">Created ${fmtDate(c.createdAt)} · Closed ${fmtDate(c.closedAt)} · ${c.votes.length} vote${c.votes.length!==1?'s':''}</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="copyCampaignLink(${c.id})">⎘ Copy Link</button>
+            <button class="btn btn-ghost btn-sm" onclick="viewPastCampaign('${c.id}')">View Results</button>
+          </div>
+        </div>`).join('');
+    }
+
+    function viewPastCampaign(id) {
+      document.getElementById('result-campaign-sel').value = String(id);
+      renderResults();
+      showTab('results');
+    }
+
+    // ── Settings rendering ─────────────────────────────────────────────────────
+    function renderSettings() {
+      const { isOpen, maxPreferred, maxCantDo, cantDoInRanking, timer, timeOptions } = appData.settings;
+      document.getElementById('s-toggle-btn').textContent = isOpen ? 'Close Poll' : 'Open Poll';
+      document.getElementById('s-toggle-btn').className   = `btn ${isOpen ? 'btn-ghost' : 'btn-success'}`;
+      document.getElementById('s-status-note').textContent = `Poll is currently ${isOpen ? 'open.' : 'closed.'}`;
+      document.getElementById('max-pref').value         = maxPreferred;
+      document.getElementById('max-cant').value         = maxCantDo ?? 1;
+      document.getElementById('cantdo-in-ranking').checked = cantDoInRanking !== false;
+      document.getElementById('timer-enabled').checked  = timer.enabled;
+      document.getElementById('timer-hours').value      = timer.durationHours;
+      document.getElementById('timer-fields').style.display = timer.enabled ? 'block' : 'none';
+      buildTimeEditor(timeOptions);
+    }
+
+    function toggleTimerFields() {
+      document.getElementById('timer-fields').style.display =
+        document.getElementById('timer-enabled').checked ? 'block' : 'none';
+    }
+
+    // ── Time editor ────────────────────────────────────────────────────────────
+    let editOptions = [];
+    function buildTimeEditor(options) { editOptions = options.map(o => ({...o})); renderTimeEditor(); }
+    function renderTimeEditor() {
+      const c = document.getElementById('time-edit-list');
+      c.innerHTML = '';
+      editOptions.forEach((opt, idx) => {
+        const tv = `${String(opt.utcHour).padStart(2,'0')}:${String(opt.utcMinute).padStart(2,'0')}`;
+        const row = document.createElement('div');
+        row.className = 'time-edit-row';
+        row.innerHTML = `
+          <div class="te-label"><label>Label</label><input type="text" value="${esc(opt.label)}" onchange="editOptions[${idx}].label=this.value" placeholder="Label"></div>
+          <div><label>UTC Time</label><input type="time" value="${tv}" onchange="setTime(${idx},this.value)"></div>
+          <div style="display:flex;align-items:flex-end"><span style="font-size:0.75rem;color:var(--text-dim);padding-bottom:10px">${tv} UTC</span></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-ghost btn-sm" onclick="removeOption(${idx})" style="color:#f87171;border-color:rgba(248,113,113,0.3)">✕</button></div>`;
+        c.appendChild(row);
+      });
+    }
+    function setTime(idx, val) { const [h,m]=val.split(':').map(Number); editOptions[idx].utcHour=h; editOptions[idx].utcMinute=m; renderTimeEditor(); }
+    function removeOption(idx) { if(editOptions.length<=1){showToast('Need at least one option.','err');return;} editOptions.splice(idx,1); renderTimeEditor(); }
+    function addTimeOption() {
+      const label=document.getElementById('new-label').value.trim();
+      const time=document.getElementById('new-time').value;
+      if(!time){showToast('Set a UTC time.','err');return;}
+      const [h,m]=time.split(':').map(Number);
+      const maxId=editOptions.reduce((a,o)=>Math.max(a,o.id),0);
+      editOptions.push({id:maxId+1,label:label||`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} UTC`,utcHour:h,utcMinute:m});
+      document.getElementById('new-label').value=''; document.getElementById('new-time').value='17:00';
+      renderTimeEditor(); showToast('Added — save to apply.','ok');
+    }
+
+    // ── Actions ────────────────────────────────────────────────────────────────
+    async function togglePoll()        { await adminPost('/api/admin/toggle', {}); }
+    async function saveVotingLimits()  {
+      const pref = parseInt(document.getElementById('max-pref').value, 10);
+      const cant = parseInt(document.getElementById('max-cant').value, 10);
+      if (isNaN(pref)||pref<1||pref>6) { showToast('Preferred must be 1–6.','err'); return; }
+      if (isNaN(cant)||cant<0||cant>6) { showToast('Can\'t Do must be 0–6.','err'); return; }
+      await adminPost('/api/admin/settings', { maxPreferred: pref, maxCantDo: cant });
+    }
+    async function saveRankingOptions() {
+      const val = document.getElementById('cantdo-in-ranking').checked;
+      await adminPost('/api/admin/settings', { cantDoInRanking: val });
+    }
+    async function saveTimeOptions()   { await adminPost('/api/admin/settings', { timeOptions: editOptions }); }
+    async function saveTimerSettings() {
+      const enabled = document.getElementById('timer-enabled').checked;
+      const hours   = parseInt(document.getElementById('timer-hours').value, 10);
+      if (isNaN(hours)||hours<1||hours>999) { showToast('Duration must be 1–999.','err'); return; }
+      await adminPost('/api/admin/settings', { timer: { enabled, durationHours: hours } });
+    }
+    async function changePassword() {
+      const pw = document.getElementById('new-pw').value.trim();
+      if (!pw) { showToast('Password cannot be empty.','err'); return; }
+      await adminPost('/api/admin/settings', { newPassword: pw });
+      password = pw; sessionStorage.setItem('admin_pw', pw);
+      document.getElementById('new-pw').value = '';
+    }
+    function confirmClear() {
+      const el = document.getElementById('confirm-clear');
+      el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
+    }
+    async function clearVotes() {
+      document.getElementById('confirm-clear').style.display = 'none';
+      await adminPost('/api/admin/clear', {});
+    }
+    async function startNewCampaign() {
+      const name = document.getElementById('new-camp-name').value.trim();
+      if (!confirm(`Archive current campaign and start "${name || 'new campaign'}"?`)) return;
+      await adminPost('/api/admin/campaign/new', { name });
+      document.getElementById('new-camp-name').value = '';
+    }
+    async function addCurrentTimer() {
+      const hours = parseInt(document.getElementById('extend-hours').value, 10);
+      if (isNaN(hours)||hours<1||hours>999) { showToast('Must be 1–999 hours.','err'); return; }
+      const endsAt = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+      await adminPost('/api/admin/campaign/timer', { endsAt });
+    }
+    async function removeCurrentTimer() {
+      if (!confirm('Remove the timer?')) return;
+      await adminPost('/api/admin/campaign/timer', { endsAt: null });
+    }
+    function copyLink() {
+      navigator.clipboard.writeText(window.location.origin + '/').then(() => showToast('Poll link copied!','ok'));
+    }
+    function copyCampaignLink(id) {
+      const url = window.location.origin + '/?c=' + id;
+      navigator.clipboard.writeText(url).then(() => showToast('Campaign link copied!','ok'));
+    }
+
+    // ── Generic admin POST ─────────────────────────────────────────────────────
+    async function adminPost(url, body) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password, ...body })
+        });
+        const data = await res.json();
+        if (res.ok) { showToast('Saved.', 'ok'); await loadData(); }
+        else showToast(data.error || 'Error.', 'err');
+      } catch { showToast('Connection error.', 'err'); }
+    }
+
+    // ── Tabs ───────────────────────────────────────────────────────────────────
+    function showTab(name) {
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(`tab-${name}`).classList.add('active');
+      document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+    }
+
+    // ── Utils ──────────────────────────────────────────────────────────────────
+    function fmtDate(iso) { if(!iso)return'—'; return new Date(iso).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
+    function fmtDateTime(iso) { if(!iso)return'—'; return new Date(iso).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); }
+    function formatDuration(ms) {
+      const h=Math.floor(ms/3600000), m=Math.floor((ms%3600000)/60000), s=Math.floor((ms%60000)/1000);
+      const p=[]; if(h>0)p.push(`${h}h`); p.push(`${m}m`); p.push(`${s}s`); return p.join(' ');
+    }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    let toastTimer;
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = `toast ${type} show`;
+      clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3500);
+    }
+  </script>
+</body>
+</html>
