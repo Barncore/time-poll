@@ -28,6 +28,9 @@ function createDefaultData() {
       maxPreferred: 1,
       maxCantDo: 1,
       cantDoInRanking: true,
+      scoreWeights: { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 },
+      spreadCantDo: false,
+      spreadPreferred: false,
       adminPassword: 'admin',
       timer: { enabled: false, durationHours: 24 },
       timeOptions: [
@@ -49,6 +52,9 @@ function migrate(data) {
   if (!s.timer)            s.timer = { enabled: false, durationHours: 24 };
   if (s.maxCantDo   == null) s.maxCantDo = 1;
   if (s.cantDoInRanking == null) s.cantDoInRanking = true;
+  if (!s.scoreWeights) s.scoreWeights = { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
+  if (s.spreadCantDo == null) s.spreadCantDo = false;
+  if (s.spreadPreferred == null) s.spreadPreferred = false;
   if (!data.currentCampaign) {
     data.currentCampaign = {
       id: 1, name: 'Poll #1',
@@ -170,7 +176,7 @@ app.post('/api/admin/clear', adminAuth, (req, res) => {
 
 app.post('/api/admin/settings', adminAuth, (req, res) => {
   const data = req.appData;
-  const { maxPreferred, maxCantDo, cantDoInRanking, timeOptions, newPassword, timer } = req.body;
+  const { maxPreferred, maxCantDo, cantDoInRanking, timeOptions, newPassword, timer, scoreWeights, spreadCantDo, spreadPreferred } = req.body;
 
   if (maxPreferred !== undefined) {
     const n = parseInt(maxPreferred, 10);
@@ -187,6 +193,24 @@ app.post('/api/admin/settings', adminAuth, (req, res) => {
   if (cantDoInRanking !== undefined) {
     data.settings.cantDoInRanking = !!cantDoInRanking;
   }
+
+  if (scoreWeights !== undefined) {
+    const keys = ['cantdo', 'notpreferred', 'fine', 'preferred'];
+    for (const k of keys) {
+      const v = parseFloat(scoreWeights[k]);
+      if (isNaN(v) || Math.round(v * 2) !== v * 2)
+        return res.status(400).json({ error: 'Score weights must be in 0.5 increments.' });
+    }
+    data.settings.scoreWeights = {
+      cantdo:       parseFloat(scoreWeights.cantdo),
+      notpreferred: parseFloat(scoreWeights.notpreferred),
+      fine:         parseFloat(scoreWeights.fine),
+      preferred:    parseFloat(scoreWeights.preferred)
+    };
+  }
+
+  if (spreadCantDo !== undefined)   data.settings.spreadCantDo   = !!spreadCantDo;
+  if (spreadPreferred !== undefined) data.settings.spreadPreferred = !!spreadPreferred;
 
   if (timer !== undefined) {
     const hours = parseInt(timer.durationHours, 10);

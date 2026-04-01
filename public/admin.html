@@ -327,14 +327,54 @@
         </div>
 
         <div class="settings-card">
+          <h3>Point Scoring Weights</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+            <div>
+              <label for="w-cantdo">✕ Can't Do</label>
+              <input type="number" id="w-cantdo" step="0.5" value="-1" style="max-width:110px">
+            </div>
+            <div>
+              <label for="w-nope">— Not Preferred</label>
+              <input type="number" id="w-nope" step="0.5" value="0" style="max-width:110px">
+            </div>
+            <div>
+              <label for="w-fine">✓ That's Fine</label>
+              <input type="number" id="w-fine" step="0.5" value="1" style="max-width:110px">
+            </div>
+            <div>
+              <label for="w-pref">★ Preferred</label>
+              <input type="number" id="w-pref" step="0.5" value="2" style="max-width:110px">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="saveScoreWeights()">Save Weights</button>
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px">Use 0.5 increments. Can't Do is typically negative.</p>
+        </div>
+
+        <div class="settings-card">
           <h3>Ranking Options</h3>
           <label class="checkbox-row">
             <input type="checkbox" id="cantdo-in-ranking" checked>
-            Include "Can't Do" in scoring (−1 point)
+            Include "Can't Do" in scoring
           </label>
-          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:8px;margin-left:24px">
-            When off, Can't Do votes are treated as 0 points in the final ranking.
+          <p style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;margin-left:24px">
+            When off, Can't Do votes count as 0 points in the final ranking.
           </p>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+            <label class="checkbox-row">
+              <input type="checkbox" id="spread-cantdo">
+              Spread Can't Do score across multiple selections
+            </label>
+            <p style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;margin-left:24px">
+              When on, if a voter marks N Can't Dos, each counts as 1/N of the weight (e.g. 2 picks → −0.5 each at default weight).
+            </p>
+            <label class="checkbox-row" style="margin-top:10px">
+              <input type="checkbox" id="spread-preferred">
+              Spread Preferred score across multiple selections
+            </label>
+            <p style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;margin-left:24px">
+              When on, extra Preferred picks fade toward the Fine score (e.g. 2 picks → 1.5 pts each at default weights).
+            </p>
+          </div>
           <button class="btn btn-primary btn-sm" style="margin-top:12px" onclick="saveRankingOptions()">Save</button>
         </div>
 
@@ -468,12 +508,11 @@
     }
 
     // ── Results ────────────────────────────────────────────────────────────────
-    const VOTE_SCORES = { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
-
     function renderResults() {
       if (!appData) return;
       const campaign = getSelectedCampaign();
-      const { timeOptions, cantDoInRanking } = appData.settings;
+      const { timeOptions, cantDoInRanking, scoreWeights: sw, spreadCantDo, spreadPreferred } = appData.settings;
+      const w = sw || { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
       const { votes } = campaign;
       const container = document.getElementById('results-list');
       container.innerHTML = '';
@@ -484,26 +523,48 @@
         return;
       }
 
-      const scored = timeOptions.map(opt => {
-        let score = 0, cant = 0, nope = 0, fine = 0, pref = 0;
-        votes.forEach(v => {
-          const vt = v.votes[opt.id] || v.votes[String(opt.id)] || 'fine';
-          if      (vt === 'cantdo')      { cant++; if (cantDoInRanking) score -= 1; }
-          else if (vt === 'notpreferred') { nope++; }
-          else if (vt === 'fine')        { fine++; score += 1; }
-          else if (vt === 'preferred')   { pref++; score += 2; }
-        });
-        return { ...opt, score, cant, nope, fine, pref };
-      }).sort((a, b) => b.score - a.score || a.cant - b.cant);
+      // Build per-option accumulators
+      const scored = timeOptions.map(opt => ({ ...opt, score: 0, cant: 0, nope: 0, fine: 0, pref: 0 }));
 
-      // max possible: all preferred = votes.length * 2
-      const maxPossible = votes.length * 2;
+      // Score per voter so spread can be computed from per-voter totals
+      votes.forEach(v => {
+        const vCantCount = Object.values(v.votes).filter(vt => vt === 'cantdo').length;
+        const vPrefCount = Object.values(v.votes).filter(vt => vt === 'preferred').length;
+        // Effective per-selection weight for this voter
+        const effectiveCantW = (spreadCantDo && vCantCount > 0)
+          ? w.cantdo / vCantCount : w.cantdo;
+        const effectivePrefW = (spreadPreferred && vPrefCount > 0)
+          ? w.fine + (w.preferred - w.fine) / vPrefCount : w.preferred;
+
+        scored.forEach((s, idx) => {
+          const vt = v.votes[timeOptions[idx].id] || v.votes[String(timeOptions[idx].id)] || 'fine';
+          if (vt === 'cantdo') {
+            s.cant++;
+            if (cantDoInRanking) s.score += effectiveCantW;
+          } else if (vt === 'notpreferred') {
+            s.nope++;
+            s.score += w.notpreferred;
+          } else if (vt === 'fine') {
+            s.fine++;
+            s.score += w.fine;
+          } else if (vt === 'preferred') {
+            s.pref++;
+            s.score += effectivePrefW;
+          }
+        });
+      });
+
+      // Sort: highest score first; tiebreak by fewest negative signals (cant + nope)
+      scored.sort((a, b) => b.score - a.score || (a.cant + a.nope) - (b.cant + b.nope));
+
+      const maxPossible = +(votes.length * w.preferred).toFixed(1);
 
       scored.forEach((opt, idx) => {
         const rank = idx + 1;
         const rc   = ['','r1','r2','r3'][rank] || 'rx';
         const rl   = ['','🥇','🥈','🥉'][rank] || `#${rank}`;
         const tot  = (opt.cant + opt.nope + opt.fine + opt.pref) || 1;
+        const scoreDisplay = Number.isInteger(opt.score) ? opt.score : opt.score.toFixed(1);
 
         const div = document.createElement('div');
         div.className = 'result-row';
@@ -525,7 +586,7 @@
             </div>
           </div>
           <div class="result-score">
-            <div class="score-num">${opt.score}</div>
+            <div class="score-num">${scoreDisplay}</div>
             <div class="score-max">/ ${maxPossible} pts</div>
           </div>`;
         container.appendChild(div);
@@ -680,16 +741,23 @@
 
     // ── Settings rendering ─────────────────────────────────────────────────────
     function renderSettings() {
-      const { isOpen, maxPreferred, maxCantDo, cantDoInRanking, timer, timeOptions } = appData.settings;
+      const { isOpen, maxPreferred, maxCantDo, cantDoInRanking, spreadCantDo, spreadPreferred, scoreWeights, timer, timeOptions } = appData.settings;
       document.getElementById('s-toggle-btn').textContent = isOpen ? 'Close Poll' : 'Open Poll';
       document.getElementById('s-toggle-btn').className   = `btn ${isOpen ? 'btn-ghost' : 'btn-success'}`;
       document.getElementById('s-status-note').textContent = `Poll is currently ${isOpen ? 'open.' : 'closed.'}`;
       document.getElementById('max-pref').value         = maxPreferred;
       document.getElementById('max-cant').value         = maxCantDo ?? 1;
       document.getElementById('cantdo-in-ranking').checked = cantDoInRanking !== false;
+      document.getElementById('spread-cantdo').checked   = !!spreadCantDo;
+      document.getElementById('spread-preferred').checked = !!spreadPreferred;
       document.getElementById('timer-enabled').checked  = timer.enabled;
       document.getElementById('timer-hours').value      = timer.durationHours;
       document.getElementById('timer-fields').style.display = timer.enabled ? 'block' : 'none';
+      const sw = scoreWeights || { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
+      document.getElementById('w-cantdo').value = sw.cantdo;
+      document.getElementById('w-nope').value   = sw.notpreferred;
+      document.getElementById('w-fine').value   = sw.fine;
+      document.getElementById('w-pref').value   = sw.preferred;
       buildTimeEditor(timeOptions);
     }
 
@@ -739,8 +807,22 @@
       await adminPost('/api/admin/settings', { maxPreferred: pref, maxCantDo: cant });
     }
     async function saveRankingOptions() {
-      const val = document.getElementById('cantdo-in-ranking').checked;
-      await adminPost('/api/admin/settings', { cantDoInRanking: val });
+      await adminPost('/api/admin/settings', {
+        cantDoInRanking: document.getElementById('cantdo-in-ranking').checked,
+        spreadCantDo:    document.getElementById('spread-cantdo').checked,
+        spreadPreferred: document.getElementById('spread-preferred').checked,
+      });
+    }
+    async function saveScoreWeights() {
+      const cantdo       = parseFloat(document.getElementById('w-cantdo').value);
+      const notpreferred = parseFloat(document.getElementById('w-nope').value);
+      const fine         = parseFloat(document.getElementById('w-fine').value);
+      const preferred    = parseFloat(document.getElementById('w-pref').value);
+      if ([cantdo, notpreferred, fine, preferred].some(isNaN)) { showToast('All weights must be numbers.', 'err'); return; }
+      if ([cantdo, notpreferred, fine, preferred].some(v => Math.round(v * 2) !== v * 2)) {
+        showToast('Weights must be in 0.5 increments.', 'err'); return;
+      }
+      await adminPost('/api/admin/settings', { scoreWeights: { cantdo, notpreferred, fine, preferred } });
     }
     async function saveTimeOptions()   { await adminPost('/api/admin/settings', { timeOptions: editOptions }); }
     async function saveTimerSettings() {
