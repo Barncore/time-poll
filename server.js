@@ -31,6 +31,7 @@ function createDefaultData() {
       scoreWeights: { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 },
       spreadCantDo: false,
       spreadPreferred: false,
+      pollDay: 1,
       adminPassword: 'admin',
       timer: { enabled: false, durationHours: 24 },
       timeOptions: [
@@ -55,6 +56,7 @@ function migrate(data) {
   if (!s.scoreWeights) s.scoreWeights = { cantdo: -1, notpreferred: 0, fine: 1, preferred: 2 };
   if (s.spreadCantDo == null) s.spreadCantDo = false;
   if (s.spreadPreferred == null) s.spreadPreferred = false;
+  if (s.pollDay == null) s.pollDay = 1;
   if (!data.currentCampaign) {
     data.currentCampaign = {
       id: 1, name: 'Poll #1',
@@ -211,6 +213,13 @@ app.post('/api/admin/settings', adminAuth, (req, res) => {
 
   if (spreadCantDo !== undefined)   data.settings.spreadCantDo   = !!spreadCantDo;
   if (spreadPreferred !== undefined) data.settings.spreadPreferred = !!spreadPreferred;
+
+  const { pollDay } = req.body;
+  if (pollDay !== undefined) {
+    const d = parseInt(pollDay, 10);
+    if (isNaN(d) || d < 0 || d > 6) return res.status(400).json({ error: 'Poll day must be 0–6.' });
+    data.settings.pollDay = d;
+  }
 
   if (timer !== undefined) {
     const hours = parseInt(timer.durationHours, 10);

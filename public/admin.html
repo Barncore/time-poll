@@ -380,6 +380,22 @@
 
         <div class="settings-card">
           <h3>Time Options</h3>
+          <div class="field-row" style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid var(--border)">
+            <label for="poll-day">Session day of week</label>
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+              <select id="poll-day" style="max-width:180px">
+                <option value="0">Sunday</option>
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+              <button class="btn btn-primary btn-sm" onclick="savePollDay()">Save Day</button>
+            </div>
+            <p style="font-size:0.75rem;color:var(--text-dim);margin-top:6px">Voters see times labelled with this weekday name.</p>
+          </div>
           <div id="time-edit-list"></div>
           <div class="add-time-row">
             <div style="flex:1;min-width:120px">
@@ -758,6 +774,7 @@
       document.getElementById('w-nope').value   = sw.notpreferred;
       document.getElementById('w-fine').value   = sw.fine;
       document.getElementById('w-pref').value   = sw.preferred;
+      document.getElementById('poll-day').value = appData.settings.pollDay ?? 1;
       buildTimeEditor(timeOptions);
     }
 
@@ -825,6 +842,10 @@
       await adminPost('/api/admin/settings', { scoreWeights: { cantdo, notpreferred, fine, preferred } });
     }
     async function saveTimeOptions()   { await adminPost('/api/admin/settings', { timeOptions: editOptions }); }
+    async function savePollDay() {
+      const d = parseInt(document.getElementById('poll-day').value, 10);
+      await adminPost('/api/admin/settings', { pollDay: d });
+    }
     async function saveTimerSettings() {
       const enabled = document.getElementById('timer-enabled').checked;
       const hours   = parseInt(document.getElementById('timer-hours').value, 10);

@@ -350,9 +350,13 @@
     }
 
     function getRefDate() {
-      // Use the current date so DST offsets are always accurate
+      // Find the next (or current) occurrence of pollDay so DST is always current
+      // and the displayed weekday matches the admin's chosen session day.
+      const targetDay = (settings && settings.pollDay != null) ? settings.pollDay : 1; // default Mon
       const now = new Date();
-      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const todayDay = now.getUTCDay(); // 0=Sun … 6=Sat
+      const daysAhead = (targetDay - todayDay + 7) % 7; // 0 = today if already that day
+      return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + daysAhead));
     }
     function localTime(utcH, utcM, tz) {
       const d = getRefDate();
