@@ -112,6 +112,7 @@
     .time-info { flex: 0 0 auto; min-width: 114px; }
     .time-local { font-size: 1rem; font-weight: 700; color: var(--text); line-height: 1.2; }
     .time-utc   { font-size: 0.75rem; color: var(--text-dim); margin-top: 3px; font-variant-numeric: tabular-nums; }
+    .tz-abbr    { font-size: 0.7rem; font-weight: 500; color: var(--text-dim); margin-left: 4px; letter-spacing: 0.02em; }
 
     /* 4 buttons: 2×2 on narrow, 4×1 on wide */
     .vote-buttons {
@@ -361,8 +362,13 @@
     function localTime(utcH, utcM, tz) {
       const d = getRefDate();
       d.setUTCHours(utcH, utcM, 0, 0);
-      return d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' }) + ' ' +
-             d.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
+      const day  = d.toLocaleDateString('en-US', { timeZone: tz, weekday: 'short' });
+      const time = d.toLocaleTimeString('en-US', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: true });
+      // Always show the tz abbreviation so DST-transition duplicates (e.g. two "2:00 AM" in
+      // Sydney on the night clocks fall back) are visually distinguishable (AEDT vs AEST).
+      const parts = d.toLocaleTimeString('en-US', { timeZone: tz, timeZoneName: 'short' }).split(' ');
+      const tzAbbr = parts[parts.length - 1]; // e.g. "AEDT", "EEST", "GMT+10"
+      return `${day} ${time} <span class="tz-abbr">${tzAbbr}</span>`;
     }
     function utcLabel(h, m) { return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')} UTC`; }
 
@@ -394,7 +400,7 @@
       const tz = document.getElementById('tz').value;
       settings.timeOptions.forEach(opt => {
         const el = document.getElementById(`tl-${opt.id}`);
-        if (el) el.textContent = localTime(opt.utcHour, opt.utcMinute, tz);
+        if (el) el.innerHTML = localTime(opt.utcHour, opt.utcMinute, tz);
       });
     }
 
