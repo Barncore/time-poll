@@ -1,11 +1,14 @@
 name = "time-poll"
-pages_build_output_dir = "public"
+main = "src/worker.js"
 compatibility_date = "2024-09-23"
 
-# KV namespace for poll data.
-# After running `npx wrangler kv namespace create POLL_DATA`, replace the
-# placeholder IDs below with the real ones printed by that command.
+# Serve public/ as static assets (index.html, admin.html, etc.)
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# KV namespace for poll data storage
 [[kv_namespaces]]
-binding     = "POLL_DATA"
-id          = "7051899874094b6781430cad49310eaf"
-preview_id  = "18d1b483d211453cb57abb77f4ec3fa3"
+binding    = "POLL_DATA"
+id         = "7051899874094b6781430cad49310eaf"
+preview_id = "18d1b483d211453cb57abb77f4ec3fa3"
