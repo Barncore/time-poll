@@ -7,5 +7,5 @@ compatibility_date = "2024-09-23"
 # placeholder IDs below with the real ones printed by that command.
 [[kv_namespaces]]
 binding     = "POLL_DATA"
-id          = "REPLACE_WITH_PRODUCTION_KV_ID"
-preview_id  = "REPLACE_WITH_PREVIEW_KV_ID"
+id          = "7051899874094b6781430cad49310eaf"
+preview_id  = "18d1b483d211453cb57abb77f4ec3fa3"
